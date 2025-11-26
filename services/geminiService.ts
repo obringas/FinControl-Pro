@@ -2,16 +2,20 @@ import { GoogleGenAI } from "@google/genai";
 import { Transaction, MonthlyStats } from "../types";
 import { formatCurrency, getMonthName } from "../utils";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 export const getFinancialAdvice = async (
   stats: MonthlyStats,
   recentTransactions: Transaction[],
   month: number
 ): Promise<string> => {
-  if (!process.env.API_KEY) {
-    return "API Key no configurada. Asegúrate de configurar la variable de entorno API_KEY.";
+  // Check for API Key safely to avoid crashing if process.env is missing in browser
+  const apiKey = process.env?.API_KEY;
+
+  if (!apiKey) {
+    return "API Key no configurada. Configura la variable de entorno API_KEY en Vercel.";
   }
+
+  // Initialize inside the function to be safe
+  const ai = new GoogleGenAI({ apiKey });
 
   const transactionSummary = recentTransactions
     .slice(0, 15) // Limit to last 15 to save tokens
