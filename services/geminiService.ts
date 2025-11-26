@@ -2,19 +2,15 @@ import { GoogleGenAI } from "@google/genai";
 import { Transaction, MonthlyStats } from "../types";
 import { formatCurrency, getMonthName } from "../utils";
 
-// WARNING: In a real production app, never expose API keys in client-side code.
-// This should be proxied through a backend.
-const API_KEY = process.env.API_KEY || ''; 
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getFinancialAdvice = async (
   stats: MonthlyStats,
   recentTransactions: Transaction[],
   month: number
 ): Promise<string> => {
-  if (!API_KEY) {
-    return "API Key no configurada. Por favor configura process.env.API_KEY para recibir consejos financieros.";
+  if (!process.env.API_KEY) {
+    return "API Key no configurada. Asegúrate de configurar la variable de entorno API_KEY.";
   }
 
   const transactionSummary = recentTransactions
