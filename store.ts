@@ -7,7 +7,7 @@ import { User } from 'firebase/auth';
 
 interface Notification {
   message: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info' | 'warning';
 }
 
 interface AppState {
@@ -24,7 +24,7 @@ interface AppState {
   removeTransaction: (id: string) => void;
   updateTransaction: (id: string, updated: Partial<Transaction>, applyToFuture?: boolean) => void;
   setFilter: (filter: Partial<FilterState>) => void;
-  showNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+  showNotification: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
   hideNotification: () => void;
   resetData: () => void;
   
@@ -128,12 +128,6 @@ export const useStore = create<AppState>()(
            try {
              // We use setDoc with specific ID instead of addDoc to keep IDs consistent
              await addDoc(collection(db, 'users', state.user.uid, 'transactions'), transaction);
-             // Note: In a real app, we might wait for the ID from Firestore, but since we generate IDs locally,
-             // using setDoc(doc(db, ..., transaction.id), transaction) is safer for consistency.
-             // For this demo, addDoc is fine, but ID management needs care. 
-             // Correction: Let's use setDoc logic via update or keep simple addDoc but ignore generated ID? 
-             // Simplest for hybrid: Just let the listener handle the final state.
-             // We'll trust the listener to reconcile.
            } catch (e) {
              console.error("Cloud save failed", e);
              get().showNotification("Guardado localmente. Error en nube.", 'warning');
@@ -151,8 +145,6 @@ export const useStore = create<AppState>()(
             newTransactions.forEach(t => {
                // Use a new doc ref for each
                const ref = doc(collection(db, 'users', state.user!.uid, 'transactions'));
-               // Or force the ID:
-               // const ref = doc(db, 'users', state.user!.uid, 'transactions', t.id);
                // Let's use the local ID as the Firestore ID for consistency
                const fixedRef = doc(db, 'users', state.user!.uid, 'transactions', t.id);
                batch.set(fixedRef, t);
@@ -199,11 +191,12 @@ export const useStore = create<AppState>()(
 
         // Cloud Update
         if (state.user && db) {
+          const userId = state.user.uid; // Capture UID to avoid null checks in callbacks
           try {
              const batch = writeBatch(db);
              
              // Update main doc
-             batch.update(doc(db, 'users', state.user.uid, 'transactions', id), updated);
+             batch.update(doc(db, 'users', userId, 'transactions', id), updated);
 
              // Update recurring
              if (applyToFuture && recurringId) {
@@ -213,7 +206,7 @@ export const useStore = create<AppState>()(
                  t.recurringId === recurringId && new Date(t.date).getTime() > referenceDate.getTime()
                );
                futureTxs.forEach(ft => {
-                  batch.update(doc(db, 'users', state.user.uid, 'transactions', ft.id), {
+                  batch.update(doc(db, 'users', userId, 'transactions', ft.id), {
                     amount: updated.amount ?? ft.amount,
                     category: updated.category ?? ft.category,
                     description: updated.description ?? ft.description,
