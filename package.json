@@ -11,9 +11,9 @@
   "dependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@google/genai": "^1.30.0",
-    "lucide-react": "^0.554.0",
-    "recharts": "^3.4.1",
+    "@google/genai": "0.1.1",
+    "lucide-react": "0.292.0",
+    "recharts": "2.10.3",
     "zustand": "^5.0.8",
     "firebase": "^12.6.0"
   },
