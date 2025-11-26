@@ -16,13 +16,20 @@ const firebaseConfig = {
 };
 
 // Inicialización de la app
-// Al tener las keys reales, la app ya está lista para conectar.
 const app = initializeApp(firebaseConfig);
 
 // Exportar servicios
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// Configuración del Proveedor de Google con corrección de Client ID
 export const googleProvider = new GoogleAuthProvider();
+
+// FIX CRÍTICO: Forzamos el uso del ID de cliente válido que tienes en Google Cloud Console
+// Esto soluciona el error "401 deleted_client"
+googleProvider.setCustomParameters({
+  client_id: '941532187940-gd0r66oe3ur60fugefd52uc9bqmto9s2.apps.googleusercontent.com'
+});
 
 // Bandera para indicar a la UI que Firebase está configurado correctamente
 export const isFirebaseReady = true;
