@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useStore } from '../../store';
-import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, X, AlertTriangle } from 'lucide-react';
 
 export const Toast: React.FC = () => {
   const { notification, hideNotification } = useStore();
@@ -19,13 +19,15 @@ export const Toast: React.FC = () => {
   const icons = {
     success: <CheckCircle size={20} className="text-emerald-500" />,
     error: <AlertCircle size={20} className="text-red-500" />,
-    info: <Info size={20} className="text-blue-500" />
+    info: <Info size={20} className="text-blue-500" />,
+    warning: <AlertTriangle size={20} className="text-amber-500" />
   };
 
   const bgColors = {
     success: 'bg-white border-emerald-100',
     error: 'bg-white border-red-100',
-    info: 'bg-white border-blue-100'
+    info: 'bg-white border-blue-100',
+    warning: 'bg-white border-amber-100'
   };
 
   return (
