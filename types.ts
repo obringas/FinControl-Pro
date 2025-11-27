@@ -51,3 +51,15 @@ export interface FilterState {
   category?: string;
   type?: TransactionType | 'all';
 }
+
+export interface Notification {
+  message: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+}
+
+export interface User {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}
