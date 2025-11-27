@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import { useStore } from '../store';
-import { calculateMonthlyStats, formatCurrency, getCategoryData, getMonthlyTrendData } from '../utils';
+import { calculateMonthlyStats, formatCurrency, getCategoryData, getMonthlyTrendData, getCategoryTrendData } from '../utils';
 import { Card } from './ui/Card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area } from 'recharts';
 import { ArrowUpCircle, ArrowDownCircle, Wallet, AlertTriangle, Sparkles, CreditCard } from 'lucide-react';
@@ -13,7 +12,6 @@ export const Dashboard: React.FC = () => {
   const { transactions, filter, categories } = useStore();
   const stats = calculateMonthlyStats(transactions, filter.month, filter.year);
 
-  // Group data by Category Group for the Pie Chart
   // Detailed Category Data for Pie Chart
   const categoryData = React.useMemo(() => {
     const rawData = getCategoryData(transactions, filter.month, filter.year);
@@ -33,6 +31,11 @@ export const Dashboard: React.FC = () => {
 
   // Now passing filter month/year to generate projection based on current view
   const trendData = getMonthlyTrendData(transactions, filter.month, filter.year);
+
+  // New: Category Trend Data for Stacked Bar Chart
+  const categoryTrendData = React.useMemo(() => {
+    return getCategoryTrendData(transactions, filter.month, filter.year, categories);
+  }, [transactions, filter.month, filter.year, categories]);
 
   const [aiAdvice, setAiAdvice] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
@@ -164,7 +167,7 @@ export const Dashboard: React.FC = () => {
 
       {/* Charts Grid - Top Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="Gastos por Categoría" className="min-h-[350px]">
+        <Card title="Gastos por Categoría (Mes Actual)" className="min-h-[350px]">
           {categoryData.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
@@ -193,6 +196,35 @@ export const Dashboard: React.FC = () => {
           )}
         </Card>
 
+        {/* NEW: Stacked Bar Chart for Category Trends */}
+        <Card title="Proyección de Gastos por Categoría" className="min-h-[350px]">
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={categoryTrendData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+              <YAxis hide />
+              <Tooltip
+                cursor={{ fill: '#f1f5f9' }}
+                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                formatter={(value) => formatCurrency(value as number)}
+              />
+              <Legend />
+              {categories.map(cat => (
+                <Bar
+                  key={cat.id}
+                  dataKey={cat.name}
+                  stackId="a"
+                  fill={cat.color}
+                  radius={[0, 0, 0, 0]}
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      </div>
+
+      {/* Charts Grid - Middle Row (Cash Flow) */}
+      <div className="grid grid-cols-1">
         <Card title="Flujo de Caja Proyectado (Cash Flow)" className="min-h-[350px]">
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={trendData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>

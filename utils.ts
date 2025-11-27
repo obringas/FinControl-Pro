@@ -40,7 +40,7 @@ export const calculateMonthlyStats = (transactions: Transaction[], month: number
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   const balance = totalIncome - totalExpense;
-  
+
   // Calculate Credit Card Consumption (Debt generated this month)
   // Sum all transaction parts where originalDate is in this month
   const creditCardConsumption = transactions
@@ -50,7 +50,7 @@ export const calculateMonthlyStats = (transactions: Transaction[], month: number
       return d.getMonth() === month && d.getFullYear() === year;
     })
     .reduce((acc, curr) => acc + curr.amount, 0);
-  
+
   let usagePercentage = 0;
   if (totalIncome > 0) {
     usagePercentage = (totalExpense / totalIncome) * 100;
@@ -96,13 +96,13 @@ export const getCategoryData = (transactions: Transaction[], month: number, year
 
 export const getMonthlyTrendData = (transactions: Transaction[], currentMonth: number, currentYear: number) => {
   const data = [];
-  
+
   // Range: Show 2 months back and 9 months forward relative to the selected date
   for (let i = -2; i <= 9; i++) {
     const d = new Date(currentYear, currentMonth + i, 1);
     const m = d.getMonth();
     const y = d.getFullYear();
-    
+
     const stats = calculateMonthlyStats(transactions, m, y);
 
     // Calculate Credit Card specific metrics
@@ -122,7 +122,7 @@ export const getMonthlyTrendData = (transactions: Transaction[], currentMonth: n
         return td.getMonth() === m && td.getFullYear() === y;
       })
       .reduce((acc, curr) => acc + curr.amount, 0);
-    
+
     // Short month name + year if it's January
     let name = getMonthName(m).substring(0, 3);
     if (m === 0 || i === -2) {
@@ -141,14 +141,14 @@ export const getMonthlyTrendData = (transactions: Transaction[], currentMonth: n
   return data;
 };
 
-export const convertToCSV = (transactions: Transaction[], categories: {id: string, name: string}[]) => {
+export const convertToCSV = (transactions: Transaction[], categories: { id: string, name: string }[]) => {
   // Headers for Excel (Spanish)
   const headers = ['Fecha Pago', 'Tipo', 'Categoría', 'Descripción', 'Monto', 'Medio de Pago', 'Plan Cuotas', 'Fecha Compra Original'];
-  
+
   const rows = transactions.map(t => {
     const categoryName = categories.find(c => c.id === t.category)?.name || 'Otros';
     const typeLabel = t.type === 'income' ? 'Ingreso' : 'Gasto';
-    
+
     const methodLabel = {
       'cash': 'Efectivo',
       'debit_card': 'Débito',
@@ -156,8 +156,8 @@ export const convertToCSV = (transactions: Transaction[], categories: {id: strin
       'transfer': 'Transferencia'
     }[t.paymentMethod] || t.paymentMethod;
 
-    const installmentLabel = t.installments 
-      ? `Cuota ${t.installments.current}/${t.installments.total}` 
+    const installmentLabel = t.installments
+      ? `Cuota ${t.installments.current}/${t.installments.total}`
       : '-';
 
     // Format dates for Excel YYYY-MM-DD
@@ -177,4 +177,45 @@ export const convertToCSV = (transactions: Transaction[], categories: {id: strin
   });
 
   return [headers.join(';'), ...rows].join('\n');
+};
+export const getCategoryTrendData = (transactions: Transaction[], currentMonth: number, currentYear: number, categories: { id: string, name: string }[]) => {
+  const data = [];
+
+  // Range: Show 2 months back and 9 months forward
+  for (let i = -2; i <= 9; i++) {
+    const d = new Date(currentYear, currentMonth + i, 1);
+    const m = d.getMonth();
+    const y = d.getFullYear();
+
+    // Filter expenses for this month
+    const monthlyExpenses = transactions.filter(t => {
+      const td = new Date(t.date);
+      return t.type === 'expense' && td.getMonth() === m && td.getFullYear() === y;
+    });
+
+    // Group by Category Name (to use as keys in Recharts)
+    const monthlyData: Record<string, any> = {};
+
+    // Initialize all categories to 0 to ensure stacked bars work correctly even if 0
+    categories.forEach(c => {
+      monthlyData[c.name] = 0;
+    });
+
+    monthlyExpenses.forEach(t => {
+      const catName = categories.find(c => c.id === t.category)?.name || 'Otros';
+      monthlyData[catName] = (monthlyData[catName] || 0) + t.amount;
+    });
+
+    // Short month name + year if needed
+    let name = getMonthName(m).substring(0, 3);
+    if (m === 0 || i === -2) {
+      name += ` '${y.toString().substring(2)}`;
+    }
+
+    data.push({
+      name,
+      ...monthlyData
+    });
+  }
+  return data;
 };
