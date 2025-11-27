@@ -102,7 +102,9 @@ export const useStore = create<AppState>()(
           state.transactions.forEach(t => {
             // Use original ID as doc ID to prevent duplicates if re-syncing
             const docRef = doc(db, 'users', state.user!.uid, 'transactions', t.id);
-            batch.set(docRef, t);
+            // Sanitize: Firestore doesn't like 'undefined', so we strip it.
+            const safeData = JSON.parse(JSON.stringify(t));
+            batch.set(docRef, safeData);
           });
 
           await batch.commit();
@@ -128,7 +130,8 @@ export const useStore = create<AppState>()(
         if (state.user && db) {
           try {
             // We use setDoc with specific ID instead of addDoc to keep IDs consistent
-            await addDoc(collection(db, 'users', state.user.uid, 'transactions'), transaction);
+            const safeData = JSON.parse(JSON.stringify(transaction));
+            await addDoc(collection(db, 'users', state.user.uid, 'transactions'), safeData);
           } catch (e) {
             console.error("Cloud save failed", e);
             get().showNotification("Guardado localmente. Error en nube.", 'warning');
@@ -148,7 +151,8 @@ export const useStore = create<AppState>()(
               const ref = doc(collection(db, 'users', state.user!.uid, 'transactions'));
               // Let's use the local ID as the Firestore ID for consistency
               const fixedRef = doc(db, 'users', state.user!.uid, 'transactions', t.id);
-              batch.set(fixedRef, t);
+              const safeData = JSON.parse(JSON.stringify(t));
+              batch.set(fixedRef, safeData);
             });
             await batch.commit();
           } catch (e) {
@@ -197,7 +201,8 @@ export const useStore = create<AppState>()(
             const batch = writeBatch(db);
 
             // Update main doc
-            batch.update(doc(db, 'users', userId, 'transactions', id), updated);
+            const safeUpdate = JSON.parse(JSON.stringify(updated));
+            batch.update(doc(db, 'users', userId, 'transactions', id), safeUpdate);
 
             // Update recurring
             if (applyToFuture && recurringId) {
@@ -207,13 +212,15 @@ export const useStore = create<AppState>()(
                 t.recurringId === recurringId && new Date(t.date).getTime() > referenceDate.getTime()
               );
               futureTxs.forEach(ft => {
-                batch.update(doc(db, 'users', userId, 'transactions', ft.id), {
+                const futureUpdate = {
                   amount: updated.amount ?? ft.amount,
                   category: updated.category ?? ft.category,
                   description: updated.description ?? ft.description,
                   paymentMethod: updated.paymentMethod ?? ft.paymentMethod,
                   expenseType: updated.expenseType ?? ft.expenseType
-                });
+                };
+                const safeFutureUpdate = JSON.parse(JSON.stringify(futureUpdate));
+                batch.update(doc(db, 'users', userId, 'transactions', ft.id), safeFutureUpdate);
               });
             }
             await batch.commit();
