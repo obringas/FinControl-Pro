@@ -2,6 +2,7 @@
 export type TransactionType = 'income' | 'expense';
 export type PaymentMethod = 'cash' | 'debit_card' | 'credit_card' | 'transfer';
 export type ExpenseType = 'fixed' | 'variable';
+export type IncomeType = 'fixed' | 'variable';
 
 export interface InstallmentDetails {
   current: number;
@@ -15,6 +16,7 @@ export interface Transaction {
   amount: number;
   type: TransactionType;
   expenseType?: ExpenseType; // Only for expenses
+  incomeType?: IncomeType; // Only for incomes
   category: string;
   date: string; // ISO string (Payment/Impact Date)
   originalDate?: string; // ISO string (Purchase/Transaction Date)
@@ -31,6 +33,7 @@ export interface Category {
   color: string;
   icon: string; // Lucide icon name
   type: TransactionType;
+  group?: string; // High-level grouping (e.g. Vivienda, Transporte)
 }
 
 export interface MonthlyStats {

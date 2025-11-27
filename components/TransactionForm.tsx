@@ -1,111 +1,116 @@
 import React, { useState, useEffect } from 'react';
-import { generateId, getMonthName } from '../utils';
 import { useStore } from '../store';
-import { TransactionType, PaymentMethod, ExpenseType, Transaction } from '../types';
-import { X, Save, Repeat, CreditCard, CheckSquare } from 'lucide-react';
+import { X, Save, CreditCard, Repeat, CalendarClock, TrendingUp, CheckSquare } from 'lucide-react';
+import { TransactionType, PaymentMethod, ExpenseType, IncomeType, Transaction } from '../types';
+import { generateId, getMonthName } from '../utils';
 
 interface TransactionFormProps {
   onClose: () => void;
-  initialData?: Transaction | null;
+  initialData?: Transaction;
 }
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initialData }) => {
-  const { addTransaction, addTransactions, updateTransaction, categories, showNotification } = useStore();
-  
-  const [type, setType] = useState<TransactionType>('expense');
-  const [amount, setAmount] = useState('');
-  const [description, setDescription] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [expenseType, setExpenseType] = useState<ExpenseType>('variable');
-  const [installments, setInstallments] = useState(1);
-  const [isRecurringIncome, setIsRecurringIncome] = useState(false);
-  
-  // New state for editing future recurring events
-  const [updateFuture, setUpdateFuture] = useState(false);
-
+  const { addTransaction, addTransactions, updateTransaction, updateRecurringFuture, categories, showNotification } = useStore();
   const isEditing = !!initialData;
 
-  // Initialize form if editing
-  useEffect(() => {
-    if (initialData) {
-      setType(initialData.type);
-      setAmount(initialData.amount.toString());
-      setDescription(initialData.description);
-      setCategoryId(initialData.category);
-      // Handle date conversion safely
-      setDate(initialData.date.split('T')[0]);
-      setPaymentMethod(initialData.paymentMethod);
-      if (initialData.expenseType) setExpenseType(initialData.expenseType);
-      // Disable recurring/installments logic visually for simple edits
-      // We generally don't want to re-trigger 12 month generation on a single edit
-    }
-  }, [initialData]);
+  // Form State
+  const [type, setType] = useState<TransactionType>(initialData?.type || 'expense');
+  const [amount, setAmount] = useState(initialData?.amount.toString() || '');
+  const [description, setDescription] = useState(initialData?.description || '');
+  const [categoryId, setCategoryId] = useState(initialData?.category || '');
+  const [date, setDate] = useState(initialData?.date.split('T')[0] || new Date().toISOString().split('T')[0]);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialData?.paymentMethod || 'cash');
+  const [expenseType, setExpenseType] = useState<ExpenseType>(initialData?.expenseType || 'variable');
+  const [incomeType, setIncomeType] = useState<IncomeType>(initialData?.incomeType || 'variable');
+  const [installments, setInstallments] = useState(1);
+  const [isRecurringIncome, setIsRecurringIncome] = useState(false);
 
-  // Filter categories based on selected type
+  // Edit Mode Specifics
+  const [updateFuture, setUpdateFuture] = useState(false);
+  const [percentageIncrease, setPercentageIncrease] = useState('');
+
+  // Future Increase Scheduling
+  const [showScheduleIncrease, setShowScheduleIncrease] = useState(false);
+  const [increaseStartDate, setIncreaseStartDate] = useState('');
+  const [increasePercentageFuture, setIncreasePercentageFuture] = useState('');
+
+  // Filter categories by type
   const filteredCategories = categories.filter(c => c.type === type);
 
-  // Auto-select first category when switching types (only if not editing or if category invalid)
+  // Effect to handle percentage increase calculation (Immediate)
   useEffect(() => {
-    if (!initialData && filteredCategories.length > 0 && !categoryId) {
-      setCategoryId(filteredCategories[0].id);
-    } else if (!initialData) {
-        // Only reset if we are not editing
-        if (filteredCategories.length > 0) {
-             const defaultCat = filteredCategories[0].id;
-             setCategoryId(defaultCat);
-        } else {
-            setCategoryId('');
-        }
+    if (isEditing && initialData && percentageIncrease) {
+      const pct = parseFloat(percentageIncrease);
+      if (!isNaN(pct)) {
+        const base = initialData.amount;
+        const newAmount = base * (1 + pct / 100);
+        setAmount(newAmount.toFixed(2));
+        setUpdateFuture(true); // Apply to future by default when using percentage increase
+      } else {
+        setAmount(initialData.amount.toString());
+      }
+    } else if (isEditing && initialData && percentageIncrease === '') {
+      // Reset to original if cleared
+      setAmount(initialData.amount.toString());
     }
-  }, [type, filteredCategories, initialData, categoryId]);
+  }, [percentageIncrease, isEditing, initialData]);
 
-  // Auto-enable recurring for Salary (Only on creation)
-  useEffect(() => {
-    if (!isEditing) {
-        if (type === 'income' && categoryId === 'cat_salary') {
-        setIsRecurringIncome(true);
-        } else if (type === 'income') {
-        setIsRecurringIncome(false);
-        }
-    }
-  }, [categoryId, type, isEditing]);
+  const calculateFutureAmount = () => {
+    if (!initialData || !increasePercentageFuture) return '0.00';
+    const base = initialData.amount;
+    const pct = parseFloat(increasePercentageFuture);
+    if (isNaN(pct)) return '0.00';
+    return (base * (1 + pct / 100)).toFixed(2);
+  };
+
+  const handleScheduleIncrease = () => {
+    if (!initialData?.recurringId || !increaseStartDate || !increasePercentageFuture) return;
+
+    const newAmount = parseFloat(calculateFutureAmount());
+
+    // Call store action to update future occurrences
+    updateRecurringFuture(initialData.recurringId, increaseStartDate, {
+      amount: newAmount
+    });
+
+    showNotification(`Aumento programado: $${newAmount} a partir del ${increaseStartDate}`, 'success');
+    onClose();
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || !description || !categoryId) return;
-
     const numericAmount = parseFloat(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) return;
+
     const [year, month, day] = date.split('-').map(Number);
-    // Fix Timezone issue: Set to noon to avoid date shifting
     const baseDate = new Date(year, month - 1, day, 12, 0, 0);
-    
+
     // --- CASE: EDITING ---
     if (isEditing && initialData) {
-        updateTransaction(initialData.id, {
-            amount: numericAmount,
-            description,
-            category: categoryId,
-            date: baseDate.toISOString(),
-            originalDate: baseDate.toISOString(), // Update both to keep consistency on single edit
-            paymentMethod,
-            expenseType: type === 'expense' ? expenseType : undefined,
-        }, updateFuture); // Pass the flag to update future recurring transactions
+      updateTransaction(initialData.id, {
+        amount: numericAmount,
+        description,
+        category: categoryId,
+        date: baseDate.toISOString(),
+        originalDate: baseDate.toISOString(), // Update both to keep consistency on single edit
+        paymentMethod,
+        expenseType: type === 'expense' ? expenseType : undefined,
+        incomeType: type === 'income' ? incomeType : undefined,
+      }, updateFuture); // Pass the flag to update future recurring transactions
 
-        showNotification(updateFuture ? 'Transacción y futuras actualizadas' : 'Transacción actualizada', 'success');
-        onClose();
-        return;
+      showNotification(updateFuture ? 'Transacción y futuras actualizadas' : 'Transacción actualizada', 'success');
+      onClose();
+      return;
     }
 
     // --- CASE: CREATING ---
     const createdAt = Date.now();
 
-    // --- CASE 1: Recurring Income (Salary) ---
-    if (type === 'income' && isRecurringIncome) {
+    // --- CASE 1: Recurring Income (Salary/Fixed) ---
+    if (type === 'income' && incomeType === 'fixed' && isRecurringIncome) {
       const newTransactions: Transaction[] = [];
       const recurringId = generateId(); // Link all transactions in this series
-      
+
       for (let i = 0; i < 12; i++) {
         const futureDate = new Date(year, month - 1 + i, day, 12, 0, 0);
         newTransactions.push({
@@ -119,19 +124,20 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
           paymentMethod: 'transfer',
           isPaid: true,
           createdAt: createdAt + i,
-          recurringId: recurringId // Add ID to group them
+          recurringId: recurringId, // Add ID to group them
+          incomeType: 'fixed'
         });
       }
       addTransactions(newTransactions);
       showNotification('Ingreso recurrente proyectado para 12 meses', 'success');
-    } 
+    }
     // --- CASE 2: Credit Card Expense ---
     else if (type === 'expense' && paymentMethod === 'credit_card') {
       const newTransactions: Transaction[] = [];
       const planId = generateId();
-      
+
       const monthlyAmount = numericAmount / installments;
-      let startMonthOffset = 1; 
+      let startMonthOffset = 1;
       if (day > 28) {
         startMonthOffset = 2; // If closing date passed, skip next month too
       }
@@ -141,14 +147,14 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
       const firstPaymentMonthName = getMonthName(firstPaymentDate.getMonth());
 
       for (let i = 0; i < installments; i++) {
-        const futureDate = new Date(year, month - 1 + startMonthOffset + i, 10, 12, 0, 0); 
-        
+        const futureDate = new Date(year, month - 1 + startMonthOffset + i, 10, 12, 0, 0);
+
         newTransactions.push({
           id: generateId(),
           type: 'expense',
           amount: monthlyAmount,
-          description: installments > 1 
-            ? `${description} (Cuota ${i + 1}/${installments})` 
+          description: installments > 1
+            ? `${description} (Cuota ${i + 1}/${installments})`
             : description,
           category: categoryId,
           date: futureDate.toISOString(), // Payment Date
@@ -175,10 +181,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
         amount: numericAmount,
         description,
         category: categoryId,
-        date: baseDate.toISOString(), 
+        date: baseDate.toISOString(),
         originalDate: baseDate.toISOString(),
         paymentMethod,
         expenseType: type === 'expense' ? expenseType : undefined,
+        incomeType: type === 'income' ? incomeType : undefined,
         isPaid: true,
         createdAt: createdAt,
       });
@@ -222,8 +229,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                {!isEditing && type === 'expense' && paymentMethod === 'credit_card' && installments > 1 
-                  ? 'Monto Total de la Compra' 
+                {!isEditing && type === 'expense' && paymentMethod === 'credit_card' && installments > 1
+                  ? 'Monto Total de la Compra'
                   : 'Monto'}
               </label>
               <div className="relative">
@@ -231,13 +238,44 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
                 <input
                   type="number"
                   value={amount}
-                  onChange={e => setAmount(e.target.value)}
+                  onChange={e => {
+                    setAmount(e.target.value);
+                    if (percentageIncrease) setPercentageIncrease(''); // Clear % if manual edit
+                  }}
                   className="w-full pl-8 pr-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-lg font-semibold"
                   placeholder="0.00"
                   required
                   step="0.01"
                 />
               </div>
+
+              {/* Percentage Increase Tool (Only for Editing Income - Immediate) */}
+              {isEditing && type === 'income' && !showScheduleIncrease && (
+                <div className="mt-3 p-3 bg-emerald-50 rounded-xl border border-emerald-100 animate-in fade-in">
+                  <label className="text-xs font-bold text-emerald-700 uppercase mb-1 block flex items-center gap-1">
+                    <TrendingUp size={14} />
+                    Aplicar Aumento Porcentual (Desde este mes)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-24">
+                      <input
+                        type="number"
+                        value={percentageIncrease}
+                        onChange={(e) => setPercentageIncrease(e.target.value)}
+                        placeholder="0"
+                        className="w-full pl-3 pr-6 py-1.5 rounded-lg border border-emerald-200 text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-emerald-600 font-bold">%</span>
+                    </div>
+                    {percentageIncrease && (
+                      <span className="text-xs text-emerald-600 font-medium">
+                        Base: ${initialData?.amount} ➜ Nuevo: ${parseFloat(amount).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {!isEditing && type === 'expense' && paymentMethod === 'credit_card' && installments > 1 && amount && (
                 <p className="text-xs text-blue-600 mt-1 font-medium">
                   Serán {installments} cuotas de ${(parseFloat(amount) / installments).toFixed(2)}
@@ -267,8 +305,20 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
                   required
                 >
                   <option value="" disabled>Seleccionar</option>
-                  {filteredCategories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  {/* Group categories by 'group' field */}
+                  {Object.entries(
+                    filteredCategories.reduce((acc, cat) => {
+                      const group = cat.group || 'Otros';
+                      if (!acc[group]) acc[group] = [];
+                      acc[group].push(cat);
+                      return acc;
+                    }, {} as Record<string, typeof filteredCategories>)
+                  ).map(([groupName, groupCats]) => (
+                    <optgroup key={groupName} label={groupName}>
+                      {groupCats.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>
@@ -284,11 +334,26 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
               </div>
             </div>
 
+            {/* Income Type Selector */}
+            {type === 'income' && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Ingreso</label>
+                <select
+                  value={incomeType}
+                  onChange={e => setIncomeType(e.target.value as IncomeType)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 outline-none bg-white"
+                >
+                  <option value="fixed">Fijo (Mensual/Sueldo)</option>
+                  <option value="variable">Variable (Extra)</option>
+                </select>
+              </div>
+            )}
+
             {/* Recurring Income Option - Creation */}
-            {!isEditing && type === 'income' && (
+            {!isEditing && type === 'income' && incomeType === 'fixed' && (
               <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   id="recurring"
                   checked={isRecurringIncome}
                   onChange={(e) => setIsRecurringIncome(e.target.checked)}
@@ -296,16 +361,16 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
                 />
                 <label htmlFor="recurring" className="text-sm text-emerald-800 flex items-center gap-2 cursor-pointer select-none">
                   <Repeat size={16} />
-                  Repetir automáticamente por 12 meses
+                  Proyectar anualmente (12 meses)
                 </label>
               </div>
             )}
-            
+
             {/* Update Future Recurrings Option - Editing */}
-            {isEditing && initialData?.recurringId && (
-               <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                <input 
-                  type="checkbox" 
+            {isEditing && initialData?.recurringId && !showScheduleIncrease && (
+              <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                <input
+                  type="checkbox"
                   id="updateFuture"
                   checked={updateFuture}
                   onChange={(e) => setUpdateFuture(e.target.checked)}
@@ -315,6 +380,66 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
                   <CheckSquare size={16} />
                   Actualizar también los meses futuros
                 </label>
+              </div>
+            )}
+
+            {/* Schedule Future Increase (Only for Recurring Income) */}
+            {isEditing && type === 'income' && initialData?.recurringId && (
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowScheduleIncrease(!showScheduleIncrease)}
+                  className="text-sm text-indigo-600 font-medium flex items-center gap-2 hover:text-indigo-800"
+                >
+                  <CalendarClock size={16} />
+                  {showScheduleIncrease ? 'Cancelar programación de aumento' : 'Programar aumento futuro'}
+                </button>
+
+                {showScheduleIncrease && (
+                  <div className="mt-3 p-4 bg-indigo-50 rounded-xl border border-indigo-100 animate-in slide-in-from-top-2">
+                    <h4 className="text-sm font-bold text-indigo-900 mb-3">Programar Aumento de Sueldo</h4>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-indigo-700 mb-1">A partir de (fecha)</label>
+                        <input
+                          type="date"
+                          value={increaseStartDate}
+                          onChange={e => setIncreaseStartDate(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-indigo-200 text-sm"
+                        />
+                      </div>
+
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-indigo-700 mb-1">Porcentaje %</label>
+                          <input
+                            type="number"
+                            value={increasePercentageFuture}
+                            onChange={e => setIncreasePercentageFuture(e.target.value)}
+                            placeholder="5"
+                            className="w-full px-3 py-2 rounded-lg border border-indigo-200 text-sm"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-indigo-700 mb-1">Nuevo Monto</label>
+                          <div className="px-3 py-2 bg-white rounded-lg border border-indigo-200 text-sm font-semibold text-slate-700">
+                            ${calculateFutureAmount()}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleScheduleIncrease}
+                        disabled={!increaseStartDate || !increasePercentageFuture}
+                        className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Aplicar Aumento Programado
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -334,7 +459,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
                       <option value="transfer">Transferencia</option>
                     </select>
                   </div>
-                   <div>
+                  <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
                     <select
                       value={expenseType}
@@ -355,16 +480,16 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
                       <span>Plan de Cuotas</span>
                     </div>
                     <div className="mb-2">
-                       <label className="block text-xs text-blue-600 mb-1 uppercase font-bold">Cantidad de Cuotas</label>
-                        <select
-                          value={installments}
-                          onChange={e => setInstallments(Number(e.target.value))}
-                          className="w-full px-3 py-2 rounded-lg border border-blue-200 text-blue-900 outline-none bg-white text-sm"
-                        >
-                          {[1, 2, 3, 4, 5, 6, 9, 12, 18, 24].map(n => (
-                            <option key={n} value={n}>{n} Cuota{n > 1 ? 's' : ''}</option>
-                          ))}
-                        </select>
+                      <label className="block text-xs text-blue-600 mb-1 uppercase font-bold">Cantidad de Cuotas</label>
+                      <select
+                        value={installments}
+                        onChange={e => setInstallments(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded-lg border border-blue-200 text-blue-900 outline-none bg-white text-sm"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 9, 12, 18, 24].map(n => (
+                          <option key={n} value={n}>{n} Cuota{n > 1 ? 's' : ''}</option>
+                        ))}
+                      </select>
                     </div>
                     <p className="text-xs text-blue-500 leading-relaxed">
                       * La primera cuota se impactará en {parseInt(date.split('-')[2]) > 28 ? '2 meses' : 'el próximo mes'} (simulando cierre de tarjeta).
