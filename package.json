@@ -11,7 +11,7 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "lucide-react": "^0.292.0",
+    "lucide-react": "^0.344.0",
     "recharts": "^2.10.3",
     "zustand": "^4.4.7",
     "firebase": "^10.7.1",
