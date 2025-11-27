@@ -77,10 +77,10 @@ function App() {
         </nav>
 
         <div className="p-4 border-t border-slate-800">
-           <div className="bg-slate-800/50 rounded-lg p-3 text-xs text-slate-400">
-             <p>Usuario Demo</p>
-             <p className="truncate">demo@fincontrol.app</p>
-           </div>
+          <div className="bg-slate-800/50 rounded-lg p-3 text-xs text-slate-400">
+            <p>Usuario Demo</p>
+            <p className="truncate">demo@fincontrol.app</p>
+          </div>
         </div>
       </aside>
 
@@ -122,12 +122,12 @@ function App() {
 
       {/* Modal */}
       {isModalOpen && (
-        <TransactionForm 
-          onClose={handleCloseModal} 
-          initialData={editingTransaction}
+        <TransactionForm
+          onClose={handleCloseModal}
+          initialData={editingTransaction || undefined}
         />
       )}
-      
+
       {/* Global Notification */}
       <Toast />
     </div>
