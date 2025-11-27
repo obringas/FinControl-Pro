@@ -14,22 +14,21 @@ export const Dashboard: React.FC = () => {
   const stats = calculateMonthlyStats(transactions, filter.month, filter.year);
 
   // Group data by Category Group for the Pie Chart
+  // Detailed Category Data for Pie Chart
   const categoryData = React.useMemo(() => {
     const rawData = getCategoryData(transactions, filter.month, filter.year);
-    // Aggregate by group
-    const grouped = rawData.reduce((acc, item) => {
-      const catDef = categories.find(c => c.name === item.name); // item.name comes from getCategoryData which uses cat name
-      // Fallback if name match fails (should rely on ID ideally but getCategoryData returns names)
-      const groupName = catDef?.group || 'Otros';
 
-      if (!acc[groupName]) {
-        acc[groupName] = { name: groupName, value: 0 };
-      }
-      acc[groupName].value += item.value;
-      return acc;
-    }, {} as Record<string, { name: string, value: number }>);
+    // Map ID to Name and use specific colors
+    const detailed = rawData.map(item => {
+      const catDef = categories.find(c => c.id === item.name); // item.name is the ID from getCategoryData
+      return {
+        name: catDef?.name || 'Otros',
+        value: item.value,
+        color: catDef?.color || '#cbd5e1'
+      };
+    }).filter(item => item.value > 0).sort((a, b) => b.value - a.value);
 
-    return Object.values(grouped).sort((a, b) => b.value - a.value);
+    return detailed;
   }, [transactions, filter.month, filter.year, categories]);
 
   // Now passing filter month/year to generate projection based on current view
@@ -180,7 +179,7 @@ export const Dashboard: React.FC = () => {
                   dataKey="value"
                 >
                   {categoryData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
                 <Tooltip formatter={(value) => formatCurrency(value as number)} />
