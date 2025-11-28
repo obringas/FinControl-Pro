@@ -14,6 +14,7 @@ export const transactionSchema = z.object({
     recurringDay: z.number().min(1).max(31).optional(),
     paymentMethod: z.enum(['cash', 'credit_card', 'debit_card', 'transfer']).optional(),
     installments: z.number().min(1).optional(),
+    firstInstallmentDate: z.string().optional(),
 });
 
 export type TransactionFormData = z.infer<typeof transactionSchema>;

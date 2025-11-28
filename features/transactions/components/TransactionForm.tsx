@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useStore } from '../../../store';
-import { X, Save, CreditCard, Repeat, CalendarClock, TrendingUp } from 'lucide-react';
+import { X, Save, CreditCard, Repeat, CalendarClock, TrendingUp, Calendar } from 'lucide-react';
 import { Transaction, InstallmentDetails } from '../../../types';
 import { generateId } from '../../../utils';
 import { transactionSchema, TransactionFormData } from '../transactionSchemas';
@@ -15,6 +15,13 @@ interface TransactionFormProps {
 export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initialData }) => {
   const { addTransaction, addTransactions, updateTransaction, categories, showNotification } = useStore();
   const isEditing = !!initialData;
+
+  // Calculate default next month date for first installment
+  const getNextMonthDate = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    return d.toISOString().split('T')[0];
+  };
 
   const {
     register,
@@ -34,6 +41,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
       recurringDay: initialData?.recurringDay || new Date().getDate(),
       paymentMethod: initialData?.paymentMethod || 'cash',
       installments: (initialData?.installments as any)?.total || 1,
+      firstInstallmentDate: getNextMonthDate(),
     }
   });
 
@@ -74,20 +82,26 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
       } else {
         if (data.paymentMethod === 'credit_card' && (data.installments || 1) > 1) {
           const transactions: Transaction[] = [];
-          const startDate = new Date(data.date);
+          // Purchase Date (when the expense happened)
+          const purchaseDate = data.date;
+          // First Payment Date (when the first installment is paid)
+          const firstPaymentDate = data.firstInstallmentDate ? new Date(data.firstInstallmentDate) : new Date(data.date);
+
           const totalAmount = Number(data.amount);
           const installmentAmount = totalAmount / (data.installments || 1);
           const planId = generateId();
 
           for (let i = 0; i < (data.installments || 1); i++) {
-            const date = new Date(startDate);
-            date.setMonth(startDate.getMonth() + i);
+            const date = new Date(firstPaymentDate);
+            date.setMonth(firstPaymentDate.getMonth() + i);
+            // Handle year rollover correctly which setMonth does automatically
 
             transactions.push({
               ...transactionData,
               id: generateId(),
               amount: installmentAmount,
-              date: date.toISOString().split('T')[0],
+              date: date.toISOString().split('T')[0], // Payment Date
+              originalDate: purchaseDate, // Purchase Date
               description: `${data.description} (Cuota ${i + 1}/${data.installments})`,
               installments: { current: i + 1, total: data.installments || 1, planId }
             });
@@ -195,7 +209,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Fecha</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Fecha Compra</label>
               <input
                 type="date"
                 {...register('date')}
@@ -250,24 +264,43 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, initi
               </div>
 
               {paymentMethod === 'credit_card' && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800 animate-in slide-in-from-top-2">
-                  <label className="block text-xs font-bold text-blue-800 dark:text-blue-300 mb-2">Cuotas</label>
-                  <div className="flex items-center gap-4">
-                    <input
-                      type="range"
-                      min="1"
-                      max="12"
-                      step="1"
-                      {...register('installments', { valueAsNumber: true })}
-                      className="flex-1 h-2 bg-blue-200 dark:bg-blue-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                    />
-                    <span className="font-bold text-blue-700 dark:text-blue-300 w-8 text-center">{installments || 1}</span>
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800 animate-in slide-in-from-top-2 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-blue-800 dark:text-blue-300 mb-2">Cuotas</label>
+                    <div className="flex items-center gap-4">
+                      <input
+                        type="range"
+                        min="1"
+                        max="12"
+                        step="1"
+                        {...register('installments', { valueAsNumber: true })}
+                        className="flex-1 h-2 bg-blue-200 dark:bg-blue-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                      />
+                      <span className="font-bold text-blue-700 dark:text-blue-300 w-8 text-center">{installments || 1}</span>
+                    </div>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                      {installments && installments > 1
+                        ? `Se crearán ${installments} transacciones de ${((amount || 0) / installments).toFixed(2)}`
+                        : 'Pago en 1 cuota'}
+                    </p>
                   </div>
-                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-                    {installments && installments > 1
-                      ? `Se crearán ${installments} transacciones de ${((amount || 0) / installments).toFixed(2)}`
-                      : 'Pago en 1 cuota'}
-                  </p>
+
+                  {installments && installments > 1 && (
+                    <div className="pt-2 border-t border-blue-200 dark:border-blue-800/50">
+                      <label className="block text-xs font-bold text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-1">
+                        <Calendar size={14} />
+                        Fecha Primer Pago (Vencimiento Resumen)
+                      </label>
+                      <input
+                        type="date"
+                        {...register('firstInstallmentDate')}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 dark:text-white"
+                      />
+                      <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-1">
+                        La primera cuota impactará en esta fecha. Las siguientes, en los meses consecutivos.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
