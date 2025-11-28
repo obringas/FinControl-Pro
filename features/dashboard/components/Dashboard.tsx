@@ -5,6 +5,8 @@ import { Card } from '../../../components/ui/Card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area } from 'recharts';
 import { ArrowUpCircle, ArrowDownCircle, Wallet, AlertTriangle, Sparkles, CreditCard } from 'lucide-react';
 import { getFinancialAdvice } from '../../../services/geminiService';
+import { TransactionDetailModal } from './TransactionDetailModal';
+import { Transaction } from '../../../types';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6366f1'];
 
@@ -40,6 +42,9 @@ export const Dashboard: React.FC = () => {
   const [aiAdvice, setAiAdvice] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
 
+  // Modal State
+  const [selectedKpi, setSelectedKpi] = useState<'income' | 'expense' | 'credit_card' | 'balance' | null>(null);
+
   const handleGetAdvice = async () => {
     setLoadingAi(true);
     const advice = await getFinancialAdvice(stats, transactions, filter.month);
@@ -54,56 +59,104 @@ export const Dashboard: React.FC = () => {
     return 'bg-emerald-500';
   };
 
+  // Filter transactions for Modal
+  const getModalTransactions = (): Transaction[] => {
+    if (!selectedKpi) return [];
+
+    return transactions.filter(t => {
+      const tDate = new Date(t.date);
+      // Basic month filter
+      const isSameMonth = tDate.getMonth() === filter.month && tDate.getFullYear() === filter.year;
+
+      if (selectedKpi === 'income') return isSameMonth && t.type === 'income';
+      if (selectedKpi === 'expense') return isSameMonth && t.type === 'expense';
+
+      if (selectedKpi === 'credit_card') {
+        // Logic for credit card consumption this month (purchase date)
+        if (t.paymentMethod !== 'credit_card') return false;
+        // If it has originalDate (recurring/installments), use that. Else use date.
+        const purchaseDate = t.originalDate ? new Date(t.originalDate) : tDate;
+        return purchaseDate.getMonth() === filter.month && purchaseDate.getFullYear() === filter.year && (!t.installments || t.installments.current === 1);
+      }
+
+      if (selectedKpi === 'balance') return isSameMonth; // Show all for balance
+
+      return false;
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  const getModalTitle = () => {
+    switch (selectedKpi) {
+      case 'income': return 'Detalle de Ingresos';
+      case 'expense': return 'Detalle de Gastos';
+      case 'credit_card': return 'Consumos con Tarjeta (Este Mes)';
+      case 'balance': return 'Balance Mensual (Todos los movimientos)';
+      default: return '';
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="relative overflow-hidden">
+        <Card
+          className="relative overflow-hidden cursor-pointer hover:shadow-md transition-all active:scale-95 group"
+          onClick={() => setSelectedKpi('income')}
+        >
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Ingresos</p>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1 group-hover:text-emerald-600 transition-colors">Ingresos</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white">{formatCurrency(stats.totalIncome)}</h3>
             </div>
-            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg text-emerald-600 dark:text-emerald-400">
+            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-200 dark:group-hover:bg-emerald-900/50 transition-colors">
               <ArrowUpCircle size={24} />
             </div>
           </div>
         </Card>
 
-        <Card>
+        <Card
+          className="relative overflow-hidden cursor-pointer hover:shadow-md transition-all active:scale-95 group"
+          onClick={() => setSelectedKpi('expense')}
+        >
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Gastos (Flujo)</p>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1 group-hover:text-red-600 transition-colors">Gastos (Flujo)</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white">{formatCurrency(stats.totalExpense)}</h3>
             </div>
-            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg text-red-600 dark:text-red-400">
+            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg text-red-600 dark:text-red-400 group-hover:bg-red-200 dark:group-hover:bg-red-900/50 transition-colors">
               <ArrowDownCircle size={24} />
             </div>
           </div>
         </Card>
 
-        <Card>
+        <Card
+          className="relative overflow-hidden cursor-pointer hover:shadow-md transition-all active:scale-95 group"
+          onClick={() => setSelectedKpi('credit_card')}
+        >
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Deuda TC Mes</p>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1 group-hover:text-blue-600 transition-colors">Deuda TC Mes</p>
               <h3 className="text-2xl font-bold text-blue-800 dark:text-blue-400">{formatCurrency(stats.creditCardConsumption)}</h3>
             </div>
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
               <CreditCard size={24} />
             </div>
           </div>
           <p className="text-xs text-slate-400 mt-2">Compras realizadas con tarjeta este mes</p>
         </Card>
 
-        <Card>
+        <Card
+          className="relative overflow-hidden cursor-pointer hover:shadow-md transition-all active:scale-95 group"
+          onClick={() => setSelectedKpi('balance')}
+        >
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Balance</p>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1 group-hover:text-indigo-600 transition-colors">Balance</p>
               <h3 className={`text-2xl font-bold ${stats.balance >= 0 ? 'text-slate-800 dark:text-white' : 'text-red-600 dark:text-red-400'}`}>
                 {formatCurrency(stats.balance)}
               </h3>
             </div>
-            <div className="p-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
+            <div className="p-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 group-hover:bg-slate-200 dark:group-hover:bg-slate-600 transition-colors">
               <Wallet size={24} />
             </div>
           </div>
@@ -186,7 +239,12 @@ export const Dashboard: React.FC = () => {
                   ))}
                 </Pie>
                 <Tooltip formatter={(value) => formatCurrency(value as number)} />
-                <Legend />
+                <Legend
+                  layout="horizontal"
+                  verticalAlign="bottom"
+                  align="center"
+                  wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }}
+                />
               </PieChart>
             </ResponsiveContainer>
           ) : (
@@ -290,6 +348,15 @@ export const Dashboard: React.FC = () => {
           </ResponsiveContainer>
         </Card>
       </div>
+
+      {/* Detail Modal */}
+      <TransactionDetailModal
+        isOpen={!!selectedKpi}
+        onClose={() => setSelectedKpi(null)}
+        title={getModalTitle()}
+        transactions={getModalTransactions()}
+        categories={categories}
+      />
     </div>
   );
 };
