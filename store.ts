@@ -1,18 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import {
-  collection,
-  addDoc,
-  onSnapshot,
-  query,
-  doc,
-  updateDoc,
-  deleteDoc,
-  writeBatch,
-  setDoc
-} from 'firebase/firestore';
-import { db } from './lib/firebase';
+import { Unsubscribe } from 'firebase/firestore';
 import { Transaction, Category, FilterState, Notification, User } from './types';
+import { TransactionRepository } from './services/transactionRepository';
 
 interface AppState {
   transactions: Transaction[];
@@ -21,6 +11,7 @@ interface AppState {
   notification: Notification | null;
   user: User | null; // Firebase User
   isLoading: boolean;
+  unsubscribeListener: Unsubscribe | null;
 
   // Actions
   addTransaction: (transaction: Transaction) => void;
@@ -107,50 +98,46 @@ export const useStore = create<AppState>()(
       notification: null,
       user: null,
       isLoading: false,
+      unsubscribeListener: null,
 
       // --- AUTH & SYNC ACTIONS ---
       setUser: (user) => {
         set({ user });
         if (user) {
           get().initializeRealtimeListener();
+        } else {
+          // Cleanup listener on logout
+          const unsub = get().unsubscribeListener;
+          if (unsub) unsub();
+          set({ unsubscribeListener: null, transactions: [] });
         }
       },
 
       initializeRealtimeListener: () => {
         const user = get().user;
-        if (!user || !db) return;
+        if (!user) return;
 
-        // Listen to User's Transactions Collection
-        const q = query(collection(db, 'users', user.uid, 'transactions'));
+        // Clean up previous listener if exists
+        const prevUnsub = get().unsubscribeListener;
+        if (prevUnsub) prevUnsub();
 
-        // This sets up a live connection. Any change in DB reflects here immediately.
-        onSnapshot(q, (snapshot) => {
-          const cloudTransactions: Transaction[] = [];
-          snapshot.forEach((doc) => {
-            cloudTransactions.push({ ...doc.data(), id: doc.id } as Transaction);
+        try {
+          const unsub = TransactionRepository.subscribeToTransactions(user.uid, (cloudTransactions) => {
+            set({ transactions: cloudTransactions });
           });
-          // Update local state with cloud data
-          set({ transactions: cloudTransactions });
-        });
+          set({ unsubscribeListener: unsub });
+        } catch (error) {
+          console.error("Failed to subscribe:", error);
+        }
       },
 
       syncLocalDataToCloud: async () => {
         const state = get();
-        if (!state.user || !db) return;
+        if (!state.user) return;
 
         set({ isLoading: true });
         try {
-          const batch = writeBatch(db);
-          // Take all local transactions and prepare them for upload
-          state.transactions.forEach(t => {
-            // Use original ID as doc ID to prevent duplicates if re-syncing
-            const docRef = doc(db, 'users', state.user!.uid, 'transactions', t.id);
-            // Sanitize: Firestore doesn't like 'undefined', so we strip it.
-            const safeData = JSON.parse(JSON.stringify(t));
-            batch.set(docRef, safeData);
-          });
-
-          await batch.commit();
+          await TransactionRepository.addBatchTransactions(state.user.uid, state.transactions);
           set({ notification: { message: 'Sincronización con la nube completada', type: 'success' } });
         } catch (error) {
           console.error(error);
@@ -161,20 +148,18 @@ export const useStore = create<AppState>()(
         }
       },
 
-      // --- STANDARD ACTIONS (Updated with Cloud Logic) ---
+      // --- STANDARD ACTIONS (Refactored with Repository) ---
 
       addTransaction: async (transaction) => {
         const state = get();
 
-        // 1. Optimistic Update (Show immediately)
+        // 1. Optimistic Update
         set((state) => ({ transactions: [...state.transactions, transaction] }));
 
         // 2. Cloud Update
-        if (state.user && db) {
+        if (state.user) {
           try {
-            // We use setDoc with specific ID instead of addDoc to keep IDs consistent
-            const safeData = JSON.parse(JSON.stringify(transaction));
-            await addDoc(collection(db, 'users', state.user.uid, 'transactions'), safeData);
+            await TransactionRepository.addTransaction(state.user.uid, transaction);
           } catch (e) {
             console.error("Cloud save failed", e);
             get().showNotification("Guardado localmente. Error en nube.", 'warning');
@@ -186,18 +171,9 @@ export const useStore = create<AppState>()(
         const state = get();
         set((state) => ({ transactions: [...state.transactions, ...newTransactions] }));
 
-        if (state.user && db) {
+        if (state.user) {
           try {
-            const batch = writeBatch(db);
-            newTransactions.forEach(t => {
-              // Use a new doc ref for each
-              const ref = doc(collection(db, 'users', state.user!.uid, 'transactions'));
-              // Let's use the local ID as the Firestore ID for consistency
-              const fixedRef = doc(db, 'users', state.user!.uid, 'transactions', t.id);
-              const safeData = JSON.parse(JSON.stringify(t));
-              batch.set(fixedRef, safeData);
-            });
-            await batch.commit();
+            await TransactionRepository.addBatchTransactions(state.user.uid, newTransactions);
           } catch (e) {
             console.error("Batch cloud save failed", e);
           }
@@ -208,9 +184,9 @@ export const useStore = create<AppState>()(
         const state = get();
         set((state) => ({ transactions: state.transactions.filter(t => t.id !== id) }));
 
-        if (state.user && db) {
+        if (state.user) {
           try {
-            await deleteDoc(doc(db, 'users', state.user.uid, 'transactions', id));
+            await TransactionRepository.deleteTransaction(state.user.uid, id);
           } catch (e) { console.error(e); }
         }
       },
@@ -240,14 +216,9 @@ export const useStore = create<AppState>()(
         }));
 
         // Cloud Update
-        if (state.user && db) {
-          const userId = state.user.uid;
+        if (state.user) {
           try {
-            const batch = writeBatch(db);
-            idsToDelete.forEach(id => {
-              batch.delete(doc(db, 'users', userId, 'transactions', id));
-            });
-            await batch.commit();
+            await TransactionRepository.deleteBatchTransactions(state.user.uid, idsToDelete);
             get().showNotification(fromDate ? 'Transacciones futuras eliminadas' : 'Serie eliminada correctamente', 'success');
           } catch (e) { console.error(e); }
         }
@@ -255,7 +226,6 @@ export const useStore = create<AppState>()(
 
       updateTransaction: async (id, updated, applyToFuture = false) => {
         const state = get();
-        // Optimistic update logic (same as before)
         const targetTx = state.transactions.find(t => t.id === id);
         if (!targetTx) return;
         const recurringId = targetTx.recurringId;
@@ -284,51 +254,42 @@ export const useStore = create<AppState>()(
         set({ transactions: updatedTransactions });
 
         // Cloud Update
-        if (state.user && db) {
-          const userId = state.user.uid; // Capture UID to avoid null checks in callbacks
+        if (state.user) {
           try {
-            const batch = writeBatch(db);
-
             // Update main doc
-            const safeUpdate = JSON.parse(JSON.stringify(updated));
-            batch.update(doc(db, 'users', userId, 'transactions', id), safeUpdate);
+            await TransactionRepository.updateTransaction(state.user.uid, id, updated);
 
             // Update recurring
             if (applyToFuture && recurringId) {
-              // We need to find the IDs of the future transactions to update them in Firestore
-              // In a real app, this query should happen in Firestore, not filtering local array
               const futureTxs = state.transactions.filter(t =>
                 t.recurringId === recurringId && new Date(t.date).getTime() > referenceDate.getTime()
               );
-              futureTxs.forEach(ft => {
-                const futureUpdate = {
+
+              const batchUpdates = futureTxs.map(ft => ({
+                id: ft.id,
+                data: {
                   amount: updated.amount ?? ft.amount,
                   category: updated.category ?? ft.category,
                   description: updated.description ?? ft.description,
                   paymentMethod: updated.paymentMethod ?? ft.paymentMethod,
                   expenseType: updated.expenseType ?? ft.expenseType,
                   incomeType: updated.incomeType ?? ft.incomeType
-                };
-                const safeFutureUpdate = JSON.parse(JSON.stringify(futureUpdate));
-                batch.update(doc(db, 'users', userId, 'transactions', ft.id), safeFutureUpdate);
-              });
+                }
+              }));
+
+              await TransactionRepository.updateBatchTransactions(state.user.uid, batchUpdates);
             }
-            await batch.commit();
           } catch (e) { console.error(e); }
         }
       },
 
       updateRecurringFuture: async (recurringId, fromDate, updated) => {
         const state = get();
-        // fromDate is "YYYY-MM-DD"
 
         // Calculate new local state
         const updatedTransactions = state.transactions.map(t => {
           if (t.recurringId === recurringId) {
-            // Extract YYYY-MM-DD from transaction date for safe comparison
             const tDateStr = t.date.split('T')[0];
-
-            // Inclusive update: >= fromDate (String comparison works for ISO dates)
             if (tDateStr >= fromDate) {
               return { ...t, ...updated };
             }
@@ -339,21 +300,18 @@ export const useStore = create<AppState>()(
         set({ transactions: updatedTransactions });
 
         // Cloud Update
-        if (state.user && db) {
-          const userId = state.user.uid;
+        if (state.user) {
           try {
-            const batch = writeBatch(db);
-
-            // Filter using the same string comparison logic
             const futureTxs = state.transactions.filter(t =>
               t.recurringId === recurringId && t.date.split('T')[0] >= fromDate
             );
 
-            futureTxs.forEach(ft => {
-              const safeUpdate = JSON.parse(JSON.stringify(updated));
-              batch.update(doc(db, 'users', userId, 'transactions', ft.id), safeUpdate);
-            });
-            await batch.commit();
+            const batchUpdates = futureTxs.map(ft => ({
+              id: ft.id,
+              data: updated
+            }));
+
+            await TransactionRepository.updateBatchTransactions(state.user.uid, batchUpdates);
           } catch (e) { console.error(e); }
         }
       },
@@ -366,9 +324,6 @@ export const useStore = create<AppState>()(
       hideNotification: () => set({ notification: null }),
 
       resetData: () => {
-        // Only allow reset if local or explicit. 
-        // If cloud connected, this is dangerous.
-        // For now, we clear local. If cloud listener is active, it might re-fetch.
         set({ transactions: [] });
       },
 
@@ -384,10 +339,9 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'fincontrol-storage',
-      version: 1, // Increment version to trigger migration
+      version: 1,
       migrate: (persistedState: any, version) => {
         if (version === 0 || !version) {
-          // Force update categories to new structure
           return { ...persistedState, categories: INITIAL_CATEGORIES };
         }
         return persistedState;
@@ -395,8 +349,6 @@ export const useStore = create<AppState>()(
       partialize: (state) => ({
         transactions: state.transactions,
         categories: state.categories,
-        // Don't persist user object fully, handled by Auth listener usually, 
-        // but for simplicity we let Firebase Auth SDK handle persistence
       }),
     }
   )

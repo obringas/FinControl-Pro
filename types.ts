@@ -23,6 +23,8 @@ export interface Transaction {
   paymentMethod: PaymentMethod;
   installments?: InstallmentDetails;
   recurringId?: string; // For grouped transactions (e.g. Salary 12 months)
+  isRecurring?: boolean;
+  recurringDay?: number;
   isPaid: boolean;
   createdAt: number;
 }

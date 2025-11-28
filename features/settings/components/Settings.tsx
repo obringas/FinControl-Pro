@@ -1,13 +1,15 @@
 
 import React, { useRef, useEffect, useState } from 'react';
-import { useStore } from '../store';
-import { Card } from './ui/Card';
-import { Download, Upload, Trash2, Database, AlertTriangle, FileSpreadsheet, Cloud, LogIn, LogOut, RefreshCw, Copy, ExternalLink, XCircle, Globe, CheckCircle2 } from 'lucide-react';
-import { convertToCSV } from '../utils';
-import { auth, googleProvider, isFirebaseReady } from '../lib/firebase';
+import { useTheme } from '../../../context/ThemeContext';
+import { useStore } from '../../../store';
+import { Card } from '../../../components/ui/Card';
+import { Download, Upload, Trash2, Database, AlertTriangle, FileSpreadsheet, Cloud, LogIn, LogOut, RefreshCw, Copy, ExternalLink, XCircle, Globe, CheckCircle2, Moon, Sun } from 'lucide-react';
+import { convertToCSV } from '../../../utils';
+import { auth, googleProvider, isFirebaseReady } from '../../../lib/firebase';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 
 export const Settings: React.FC = () => {
+  const { theme, toggleTheme } = useTheme();
   const { getData, loadData, resetData, showNotification, user, setUser, syncLocalDataToCloud, isLoading } = useStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -182,6 +184,29 @@ export const Settings: React.FC = () => {
             title="Copiar Dominio"
           >
             <Copy size={16} />
+          </button>
+        </div>
+
+        {/* Dark Mode Toggle */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm flex items-center justify-between border border-slate-100 dark:border-slate-700">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${theme === 'dark' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-amber-100 text-amber-600'}`}>
+              {theme === 'dark' ? <Moon size={24} /> : <Sun size={24} />}
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800 dark:text-white">Apariencia</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {theme === 'dark' ? 'Modo Oscuro activado' : 'Modo Claro activado'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={toggleTheme}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${theme === 'dark' ? 'bg-indigo-600' : 'bg-slate-200'}`}
+          >
+            <span
+              className={`${theme === 'dark' ? 'translate-x-6' : 'translate-x-1'} inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow-sm`}
+            />
           </button>
         </div>
       </div>

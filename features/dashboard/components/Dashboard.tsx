@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useStore } from '../store';
-import { calculateMonthlyStats, formatCurrency, getCategoryData, getMonthlyTrendData, getCategoryTrendData } from '../utils';
-import { Card } from './ui/Card';
+import { useStore } from '../../../store';
+import { calculateMonthlyStats, formatCurrency, getCategoryData, getMonthlyTrendData, getCategoryTrendData } from '../../../utils';
+import { Card } from '../../../components/ui/Card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area } from 'recharts';
 import { ArrowUpCircle, ArrowDownCircle, Wallet, AlertTriangle, Sparkles, CreditCard } from 'lucide-react';
-import { getFinancialAdvice } from '../services/geminiService';
+import { getFinancialAdvice } from '../../../services/geminiService';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6366f1'];
 
@@ -61,10 +61,10 @@ export const Dashboard: React.FC = () => {
         <Card className="relative overflow-hidden">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-slate-500 text-sm font-medium mb-1">Ingresos</p>
-              <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(stats.totalIncome)}</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Ingresos</p>
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-white">{formatCurrency(stats.totalIncome)}</h3>
             </div>
-            <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600">
+            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg text-emerald-600 dark:text-emerald-400">
               <ArrowUpCircle size={24} />
             </div>
           </div>
@@ -73,10 +73,10 @@ export const Dashboard: React.FC = () => {
         <Card>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-slate-500 text-sm font-medium mb-1">Gastos (Flujo)</p>
-              <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(stats.totalExpense)}</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Gastos (Flujo)</p>
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-white">{formatCurrency(stats.totalExpense)}</h3>
             </div>
-            <div className="p-2 bg-red-100 rounded-lg text-red-600">
+            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg text-red-600 dark:text-red-400">
               <ArrowDownCircle size={24} />
             </div>
           </div>
@@ -85,10 +85,10 @@ export const Dashboard: React.FC = () => {
         <Card>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-slate-500 text-sm font-medium mb-1">Deuda TC Mes</p>
-              <h3 className="text-2xl font-bold text-blue-800">{formatCurrency(stats.creditCardConsumption)}</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Deuda TC Mes</p>
+              <h3 className="text-2xl font-bold text-blue-800 dark:text-blue-400">{formatCurrency(stats.creditCardConsumption)}</h3>
             </div>
-            <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
               <CreditCard size={24} />
             </div>
           </div>
@@ -98,12 +98,12 @@ export const Dashboard: React.FC = () => {
         <Card>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-slate-500 text-sm font-medium mb-1">Balance</p>
-              <h3 className={`text-2xl font-bold ${stats.balance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Balance</p>
+              <h3 className={`text-2xl font-bold ${stats.balance >= 0 ? 'text-slate-800 dark:text-white' : 'text-red-600 dark:text-red-400'}`}>
                 {formatCurrency(stats.balance)}
               </h3>
             </div>
-            <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
+            <div className="p-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
               <Wallet size={24} />
             </div>
           </div>
@@ -113,12 +113,12 @@ export const Dashboard: React.FC = () => {
       {/* Health Indicator */}
       <Card className="p-0">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-sm font-medium text-slate-600">Uso del Presupuesto (vs Ingresos)</span>
-          <span className={`text-sm font-bold ${stats.usagePercentage > 95 ? 'text-red-500' : 'text-slate-700'}`}>
+          <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Uso del Presupuesto (vs Ingresos)</span>
+          <span className={`text-sm font-bold ${stats.usagePercentage > 95 ? 'text-red-500' : 'text-slate-700 dark:text-slate-200'}`}>
             {stats.usagePercentage.toFixed(1)}%
           </span>
         </div>
-        <div className="w-full bg-slate-100 rounded-full h-3">
+        <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-3">
           <div
             className={`h-3 rounded-full transition-all duration-1000 ${getProgressColor(stats.usagePercentage)}`}
             style={{ width: `${Math.min(stats.usagePercentage, 100)}%` }}
